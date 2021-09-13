@@ -4,7 +4,7 @@ using System.Text;
 
 namespace BattleArena
 {
-    //Test2
+    //Test 
 
     /// <summary>
     /// Represents any entity that exists in game
