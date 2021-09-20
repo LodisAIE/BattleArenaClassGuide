@@ -1,23 +1,41 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.IO;
 
 
 namespace BattleArena
 {
 
+    public enum ItemType
+    {
+        DEFENSE,
+        ATTACK,
+        NONE
+    }
+
+    public enum Scene
+    {
+        STARTMENU,
+        NAMECREATION,
+        CHARACTERSELECTION,
+        BATTLE,
+        RESTARTMENU
+    }
+
+
     public struct Item
     {
         public string Name;
         public float StatBoost;
+        public ItemType Type;
     }
 
 
-    class Game
+    public class Game
     {
-        
         private bool _gameOver;
-        private int _currentScene;
+        private Scene _currentScene;
         private Player _player;
         private Entity[] _enemies;
         private int _currentEnemyIndex;
@@ -55,12 +73,12 @@ namespace BattleArena
         public void InitializeItems()
         {
             //Wizard items
-            Item bigWand = new Item { Name = "Big Wand", StatBoost = 5 };
-            Item bigShield = new Item { Name = "Big Shield", StatBoost = 15 };
+            Item bigWand = new Item { Name = "Big Wand", StatBoost = 5, Type = ItemType.ATTACK };
+            Item bigShield = new Item { Name = "Big Shield", StatBoost = 15, Type = ItemType.DEFENSE };
 
             //Knight items
-            Item wand = new Item { Name = "Wand", StatBoost = 1025 };
-            Item shoes = new Item { Name = "Shoes", StatBoost = 9000.05f };
+            Item wand = new Item { Name = "Wand", StatBoost = 10, Type = ItemType.ATTACK };
+            Item shoes = new Item { Name = "Shoes", StatBoost = 90, Type = ItemType.DEFENSE };
 
             //Initialize arrays
             _wizardItems = new Item[] { bigWand, bigShield };
@@ -71,11 +89,11 @@ namespace BattleArena
         {
             _currentEnemyIndex = 0;
 
-            Entity fraawg = new Entity("Fraawg", 42590, 15, 573);
+            Entity fraawg = new Entity("Fraawg", 42, 15, 57);
 
-            Entity sassafrazzz = new Entity("Sassafrazzz", 745, 1738, 5907);
+            Entity sassafrazzz = new Entity("Sassafrazzz", 74, 17, 59);
 
-            Entity wompus = new Entity("Wompus With Gun", 999, 55, 3000);
+            Entity wompus = new Entity("Wompus With Gun", 99, 55, 30);
 
             _enemies = new Entity[] { fraawg, sassafrazzz, wompus };
 
@@ -97,6 +115,69 @@ namespace BattleArena
         {
             Console.WriteLine("Guh bah");
             Console.ReadKey(true);
+        }
+
+        public void Save()
+        {
+            //Create a new stream writer
+            StreamWriter writer = new StreamWriter("SaveData.txt");
+
+            //Save current enemy index
+            writer.WriteLine(_currentEnemyIndex);
+
+            //Save player and enemy stats
+            _player.Save(writer);
+            _currentEnemy.Save(writer);
+
+            //Close writer when done saving
+            writer.Close();
+        }
+
+        public bool Load()
+        {
+            bool loadSuccessful = true;
+
+            //If the file doesn't exist...
+            if (!File.Exists("SaveData.txt"))
+                //...return false
+                loadSuccessful = false;
+
+            //Create a new reader to read from the text file
+            StreamReader reader = new StreamReader("SaveData.txt");
+
+            //If the first line can't be converted into an integer...
+            if (!int.TryParse(reader.ReadLine(), out _currentEnemyIndex))
+                //...return false
+                loadSuccessful = false;
+
+            //Load player job
+            string job = reader.ReadLine();
+
+            //Assign items based on player job
+            if (job == "Wizard")
+                _player = new Player(_wizardItems);
+            else if (job == "Knight")
+                _player = new Player(_knightItems);
+            else
+                loadSuccessful = false;
+
+            _player.Job = job;
+
+            if (!_player.Load(reader))
+                loadSuccessful = false;
+
+            //Create a new instance and try to load the enemy
+            _currentEnemy = new Entity();
+            if (!_currentEnemy.Load(reader))
+                loadSuccessful = false;
+
+            //Update the array to match the current enemy stats
+            _enemies[_currentEnemyIndex] = _currentEnemy;
+
+            //Close the reader once loading is finished
+            reader.Close();
+
+            return loadSuccessful;
         }
 
         /// <summary>
@@ -138,7 +219,19 @@ namespace BattleArena
                         Console.ReadKey(true);
                     }
                 }
+                //If the player didn't type an int
+                else
+                {
+                    //Set input received to be the default value
+                    inputReceived = -1;
+                    Console.WriteLine("Invalid Input");
+                    Console.ReadKey(true);
+                }
+
+                Console.Clear();
             }
+
+            return inputReceived;
         }
 
         /// <summary>
@@ -148,20 +241,22 @@ namespace BattleArena
         {
             switch (_currentScene)
             {
-                case 0:
+                case Scene.STARTMENU:
+                    DisplayStartMenu();
+                    break;
+                case Scene.NAMECREATION:
                     GetPlayerName();
                     break;
-                case 1:
+                case Scene.CHARACTERSELECTION:
                     CharacterSelection();
                     break;
-                case 2:
+                case Scene.BATTLE:
                     Battle();
                     CheckBattleResults();
                     break;
-                case 3:
-                    DisplayMainMenu();
+                case Scene.RESTARTMENU:
+                    DisplayRestartMenu();
                     break;
-
             }
 
         }
@@ -169,18 +264,44 @@ namespace BattleArena
         /// <summary>
         /// Displays the menu that allows the player to start or quit the game
         /// </summary>
-        void DisplayMainMenu()
+        void DisplayRestartMenu()
         {
             int choice = GetInput("Play Again?", "Yes", "No");
 
-            if (choice == 1)
+            if (choice == 0)
             {
                 _currentScene = 0;
                 InitializeEnemies();
             }
-            else if (choice == 2)
+            else if (choice == 1)
             {
                 _gameOver = true;
+            }
+        }
+
+        public void DisplayStartMenu()
+        {
+            int choice = GetInput("Welcome to Battle Arena!", "Start New Game", "Load Game");
+
+            if (choice == 0)
+            {
+                _currentScene = Scene.NAMECREATION;
+            }
+            else if (choice == 1)
+            {
+                if (Load())
+                {
+                    Console.WriteLine("Load Successful!");
+                    Console.ReadKey(true);
+                    Console.Clear();
+                    _currentScene = Scene.BATTLE;
+                }
+                else
+                {
+                    Console.WriteLine("Load Failed.");
+                    Console.ReadKey(true);
+                    Console.Clear();
+                }
             }
         }
 
@@ -198,7 +319,7 @@ namespace BattleArena
 
             int choice = GetInput("You've entered " + _playerName + ". Are you sure you want to keep this name?", "Yes", "No");
 
-            if (choice == 1)
+            if (choice == 0)
             {
                 _currentScene++;
             }
@@ -212,14 +333,14 @@ namespace BattleArena
         {
             int choice = GetInput("Nice meet you " + _playerName + ". Please select a character.", "Wizard", "Knight");
 
-            if (choice == 1)
+            if (choice == 0)
             {
-                _player = new Player(_playerName, 50, 25000000, 5000000, _wizardItems);
+                _player = new Player(_playerName, 50, 25, 5, _wizardItems, "Wizard");
                 _currentScene++;
             }
-            else if (choice == 2)
+            else if (choice == 1)
             {
-                _player = new Player(_playerName, 75, 15, 10, _knightItems);
+                _player = new Player(_playerName, 75, 15, 10, _knightItems, "Knight");
                 _currentScene++;
             }
         }
@@ -237,6 +358,19 @@ namespace BattleArena
             Console.WriteLine();
         }
 
+        public void DisplayEquipItemMenu()
+        {
+            //Get item index
+            int choice = GetInput("Select an item to equip.", _player.GetItemNames());
+
+            //Equip item at given index
+            if (!_player.TryEquipItem(choice))
+                Console.WriteLine("You couldn't find that item in your bag.");
+
+            //Print feedback
+            Console.WriteLine("You equipped " + _player.CurrentItem.Name + "!");
+        }
+
         /// <summary>
         /// Simulates one turn in the current monster fight
         /// </summary>
@@ -247,17 +381,36 @@ namespace BattleArena
             DisplayStats(_player);
             DisplayStats(_currentEnemy);
 
-            int choice = GetInput("A " + _currentEnemy.Name + " stands in front of you! What will you do?", "Attack", "Equip Item");
+            int choice = GetInput("A " + _currentEnemy.Name + " stands in front of you! What will you do?", "Attack", "Equip Item", "Remove current item", "Save");
 
-            if (choice == 1)
+            if (choice == 0)
             {
                 damageDealt = _player.Attack(_currentEnemy);
                 Console.WriteLine("You dealt " + damageDealt + " damage!");
             }
+            else if (choice == 1)
+            {
+                DisplayEquipItemMenu();
+                Console.ReadKey(true);
+                Console.Clear();
+                return;
+            }
             else if (choice == 2)
             {
-                Console.WriteLine("You dodged the enemy's attack!");
-                Console.ReadKey();
+                if (!_player.TryRemoveCurrentItem())
+                    Console.WriteLine("You don't have anything equipped.");
+                else
+                    Console.WriteLine("You placed the item in your bag.");
+
+                Console.ReadKey(true);
+                Console.Clear();
+                return;
+            }
+            else if (choice == 3)
+            {
+                Save();
+                Console.WriteLine("Saved Game");
+                Console.ReadKey(true);
                 Console.Clear();
                 return;
             }
@@ -280,7 +433,7 @@ namespace BattleArena
                 Console.WriteLine("You were slain...");
                 Console.ReadKey(true);
                 Console.Clear();
-                _currentScene = 3;
+                _currentScene = Scene.RESTARTMENU;
             }
             else if (_currentEnemy.Health <= 0)
             {
@@ -291,7 +444,7 @@ namespace BattleArena
 
                 if (_currentEnemyIndex >= _enemies.Length)
                 {
-                    _currentScene = 3;
+                    _currentScene = Scene.RESTARTMENU;
                     Console.WriteLine("You've slain all the enemies! You are a true warrior.");
                     return;
                 }
